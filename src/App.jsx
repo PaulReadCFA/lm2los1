@@ -11,6 +11,8 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  ComposedChart, // ✅ added
+  Line           // ✅ added (for total cash flow line)
 } from "recharts";
 
 /**
@@ -24,6 +26,39 @@ import {
  * Note: Charts now use inline heights so they render even if Tailwind isn't set up yet.
  */
 
+ 
+ // --- UI primitives ---
+const Card = ({ title, children }) => (
+  <section className="bg-white rounded-2xl shadow-md border border-gray-200">
+    <header className="px-5 pt-5 pb-3 border-b border-gray-100">
+      <h2 className="text-2xl font-georgia text-cfa-dark">{title}</h2>
+    </header>
+    <div className="p-5">{children}</div>
+  </section>
+);
+
+const Field = ({ label, children, hint }) => (
+  <div className="grid grid-cols-[1fr_auto] items-center gap-3 py-1.5">
+    <label className="text-sm font-arial text-gray-700">{label}</label>
+    <div className="flex items-center gap-1">{children}</div>
+    {hint ? <div className="col-span-2 text-xs text-gray-500">{hint}</div> : null}
+  </div>
+);
+
+const Input = ({ className = "", ...props }) => (
+  <input
+    {...props}
+    className={
+      "w-36 rounded-xl border border-gray-300 bg-white px-3 py-2 text-right font-arial text-sm " +
+      "shadow-sm focus:outline-none focus:ring-2 focus:ring-cfa-blue/30 focus:border-cfa-blue " +
+      className
+    }
+  />
+);
+
+ 
+ 
+ 
 // CFA palette
 const CFA = {
   primary: "#4476FF",
@@ -61,7 +96,13 @@ function buildMortgageSchedule({ principal = 800000, rate = 0.06, years = 30 }) 
     const interest = bal * i;
     const principalPaid = pmt - interest;
     bal -= principalPaid;
-    rows.push({ month: t, interest, principal: principalPaid, total: pmt, balance: Math.max(bal, 0) });
+    rows.push({
+  month: t,
+  interest,
+  principal: principalPaid,
+  total: interest + principalPaid, // explicitly calculate
+  balance: Math.max(bal, 0),
+});
   }
   return { rows, pmt };
 }
@@ -155,7 +196,15 @@ export default function App() {
   const [shortYears, setShortYears] = useState(5);
   const divs = useMemo(() => buildDividendSeries({ D0, required: req, gConst, gShort, gLong, shortYears, horizonYears: 10 }), [D0, req, gConst, gShort, gLong, shortYears]);
 
-  const mortgageChart = useMemo(() => mortgage.rows.slice(0, 120), [mortgage]);
+  // Show the full schedule (all months in the selected term)
+const mortgageChart = useMemo(() => mortgage.rows, [mortgage]);
+
+// Year tick marks at 12, 24, 36, ... through the selected term
+const mortgageTicks = useMemo(() => {
+  const years = Math.ceil(mortgageChart.length / 12);
+  return Array.from({ length: years }, (_, i) => (i + 1) * 12);
+}, [mortgageChart]);
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -208,34 +257,71 @@ export default function App() {
         </section>
 
         {/* Mortgage Module */}
-        <section className="bg-white rounded-2xl shadow p-6">
-          <h2 className="text-2xl font-semibold mb-4 font-[Georgia]" style={{ color: CFA.dark }}>2) Mortgage Amortization (Level Payment)</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="col-span-1">
-              <div className="rounded-2xl border p-4 bg-gray-50">
-                <h3 className="font-semibold mb-2 font-[Georgia]" style={{ color: CFA.primary }}>Inputs</h3>
-                <NumberInput label="Mortgage Amount ($)" value={mortgageAmt} min={10000} step={1000} onChange={setMortgageAmt} />
-                <PercentInput label="Annual Rate" value={mortgageRate} onChange={setMortgageRate} />
-                <NumberInput label="Term (years)" value={mortgageYears} min={1} max={40} step={1} onChange={setMortgageYears} />
-                <div className="mt-4 text-sm text-gray-700 font-[Arial]"><p><strong>Level Payment:</strong> {fmtUSD(mortgage.pmt)} / month</p></div>
-              </div>
-            </div>
+<Card title="2) Mortgage Amortization (Level Payment)">
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    {/* Inputs */}
+    <div>
+      <h3 className="font-georgia text-cfa-blue mb-2">Inputs</h3>
+      <div className="rounded-xl border border-gray-200 p-4 bg-gray-50">
+        <Field label="Mortgage Amount ($)">
+          <Input type="number" step="1000" value={mortgageAmt} onChange={(e)=>setMortgageAmt(+e.target.value||0)} />
+        </Field>
+        <Field label="Annual Rate">
+          <Input type="number" step="0.01" value={(mortgageRate*100).toFixed(2)} onChange={(e)=>setMortgageRate((+e.target.value||0)/100)} />
+          <span className="text-sm text-gray-500 font-arial">%</span>
+        </Field>
+        <Field label="Term (years)">
+          <Input type="number" step="1" value={mortgageYears} onChange={(e)=>setMortgageYears(+e.target.value||0)} />
+        </Field>
 
-            <div className="col-span-2">
-              <div style={{ height: 320 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={mortgageChart}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" label={{ value: "Months (first 120 shown)", position: "insideBottom", offset: -4 }} />
-                    <YAxis tickFormatter={fmtUSD} />
-                    <Tooltip formatter={(v) => fmtUSD(v)} />
-                    <Legend />
-                    <Area type="monotone" dataKey="interest" name="Interest" fill={CFA.primary} stroke={CFA.primary} opacity={0.8} />
-                    <Area type="monotone" dataKey="principal" name="Principal" fill={CFA.dark} stroke={CFA.dark} opacity={0.7} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              <p className="text-xs text-gray-600 mt-2 font-[Arial]">Early payments are interest‑heavy; principal share grows over time. Total payment remains constant.</p>
+        <div className="mt-3 h-px bg-gray-200" />
+
+        <p className="mt-3 text-sm font-arial text-gray-700">
+          <strong>Level Payment:</strong> {fmtUSD(mortgage.pmt)} <span className="text-gray-500">/ month</span>
+        </p>
+      </div>
+    </div>
+
+    {/* Chart */}
+    <div className="lg:col-span-2">
+      <div className="rounded-xl border border-gray-200 bg-white p-3">
+        <div style={{ height: 340 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={mortgageChart}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="month"
+                type="number"
+                domain={[1, mortgageChart.length]}
+                ticks={mortgageTicks}
+                tickFormatter={(m) => (m/12).toFixed(0)}
+                label={{ value: "Years", position: "insideBottom", offset: -4 }}
+              />
+              <YAxis tickFormatter={fmtUSD} />
+              <Tooltip
+                formatter={(v)=>fmtUSD(v)}
+                contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }}
+              />
+              <Legend wrapperStyle={{ marginTop: 8 }} />
+              {/* Principal on bottom, Interest on top */}
+              <Bar dataKey="principal" name="Principal Amortization" stackId="pmt" fill="#06005A" radius={[3,3,0,0]} />
+              <Bar dataKey="interest" name="Interest Cash Flows" stackId="pmt" fill="#4476FF" radius={[3,3,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <p className="text-xs text-gray-600 mt-2 font-arial">
+          X‑axis spans the full mortgage term. Stacked bars show constant payment split into principal and interest.
+        </p>
+      </div>
+    </div>
+  </div>
+</Card>
+
+
+<p className="text-xs text-gray-600 mt-2 font-[Arial]">
+  X‑axis spans the full mortgage term. Ticks mark whole years; hover to see month‑level details.
+</p>
+
             </div>
           </div>
         </section>
