@@ -264,20 +264,36 @@ const mortgageTicks = useMemo(() => {
       <h3 className="font-georgia text-cfa-blue mb-2">Inputs</h3>
       <div className="rounded-xl border border-gray-200 p-4 bg-gray-50">
         <Field label="Mortgage Amount ($)">
-          <Input type="number" step="1000" value={mortgageAmt} onChange={(e)=>setMortgageAmt(+e.target.value||0)} />
+          <Input
+            type="number"
+            step="1000"
+            value={mortgageAmt}
+            onChange={(e) => setMortgageAmt(+e.target.value || 0)}
+          />
         </Field>
         <Field label="Annual Rate">
-          <Input type="number" step="0.01" value={(mortgageRate*100).toFixed(2)} onChange={(e)=>setMortgageRate((+e.target.value||0)/100)} />
+          <Input
+            type="number"
+            step="0.01"
+            value={(mortgageRate * 100).toFixed(2)}
+            onChange={(e) => setMortgageRate((+e.target.value || 0) / 100)}
+          />
           <span className="text-sm text-gray-500 font-arial">%</span>
         </Field>
         <Field label="Term (years)">
-          <Input type="number" step="1" value={mortgageYears} onChange={(e)=>setMortgageYears(+e.target.value||0)} />
+          <Input
+            type="number"
+            step="1"
+            value={mortgageYears}
+            onChange={(e) => setMortgageYears(+e.target.value || 0)}
+          />
         </Field>
 
         <div className="mt-3 h-px bg-gray-200" />
 
         <p className="mt-3 text-sm font-arial text-gray-700">
-          <strong>Level Payment:</strong> {fmtUSD(mortgage.pmt)} <span className="text-gray-500">/ month</span>
+          <strong>Level Payment:</strong> {fmtUSD(mortgage.pmt)}{" "}
+          <span className="text-gray-500">/ month</span>
         </p>
       </div>
     </div>
@@ -294,23 +310,36 @@ const mortgageTicks = useMemo(() => {
                 type="number"
                 domain={[1, mortgageChart.length]}
                 ticks={mortgageTicks}
-                tickFormatter={(m) => (m/12).toFixed(0)}
+                tickFormatter={(m) => (m / 12).toFixed(0)}
                 label={{ value: "Years", position: "insideBottom", offset: -4 }}
               />
               <YAxis tickFormatter={fmtUSD} />
               <Tooltip
-                formatter={(v)=>fmtUSD(v)}
+                formatter={(v) => fmtUSD(v)}
                 contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }}
               />
               <Legend wrapperStyle={{ marginTop: 8 }} />
               {/* Principal on bottom, Interest on top */}
-              <Bar dataKey="principal" name="Principal Amortization" stackId="pmt" fill="#06005A" radius={[3,3,0,0]} />
-              <Bar dataKey="interest" name="Interest Cash Flows" stackId="pmt" fill="#4476FF" radius={[3,3,0,0]} />
+              <Bar
+                dataKey="principal"
+                name="Principal Amortization"
+                stackId="pmt"
+                fill="#06005A"
+                radius={[3, 3, 0, 0]}
+              />
+              <Bar
+                dataKey="interest"
+                name="Interest Cash Flows"
+                stackId="pmt"
+                fill="#4476FF"
+                radius={[3, 3, 0, 0]}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
         <p className="text-xs text-gray-600 mt-2 font-arial">
-          X‑axis spans the full mortgage term. Stacked bars show constant payment split into principal and interest.
+          X‑axis spans the full mortgage term. Stacked bars show constant
+          payment split into principal and interest.
         </p>
       </div>
     </div>
@@ -318,13 +347,8 @@ const mortgageTicks = useMemo(() => {
 </Card>
 
 
-<p className="text-xs text-gray-600 mt-2 font-[Arial]">
-  X‑axis spans the full mortgage term. Ticks mark whole years; hover to see month‑level details.
-</p>
 
-            </div>
-          </div>
-        </section>
+
 
         {/* Dividends Module */}
         <section className="bg-white rounded-2xl shadow p-6">
