@@ -9,66 +9,151 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  AreaChart,
-  Area,
-  ComposedChart, // ✅ added
-  Line           // ✅ added (for total cash flow line)
 } from "recharts";
 
 /**
  * CFA Institute – Quantitative Methods: LOS 1
- * Interactive learning tool covering:
- * 1) Coupon Bond Cash Flows & Price (semiannual default)
- * 2) Mortgage (Level-Payment) Amortization
- * 3) Dividend Discount Models (no growth, constant growth, two‑stage growth)
- *
- * Tech: React + TailwindCSS + Recharts + Framer Motion
- * Note: Charts now use inline heights so they render even if Tailwind isn't set up yet.
+ * 1) Coupon Bond Cash Flows & Price
+ * 2) Mortgage Amortization (stacked Interest + Principal)
+ * 3) Dividend Discount Models (no growth, Gordon, two-stage)
  */
 
- 
- // --- UI primitives ---
+// ---- CFA palette & helpers ----
+const CFA = { primary: "#4476FF", dark: "#06005A" };
+const fmtUSD = (x) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(x);
+const round2 = (x) => Math.round((x + Number.EPSILON) * 100) / 100;
+
+/* -------------------------------------------------------------------------- */
+/*                             Compact calculator UI                           */
+/* -------------------------------------------------------------------------- */
+
 const Card = ({ title, children }) => (
   <section className="bg-white rounded-2xl shadow-md border border-gray-200">
-    <header className="px-5 pt-5 pb-3 border-b border-gray-100">
+    <header className="px-6 pt-6 pb-3 border-b border-gray-100">
       <h2 className="text-2xl font-georgia text-cfa-dark">{title}</h2>
     </header>
-    <div className="p-5">{children}</div>
+    <div className="p-6">{children}</div>
   </section>
 );
 
-const Field = ({ label, children, hint }) => (
-  <div className="grid grid-cols-[1fr_auto] items-center gap-3 py-1.5">
-    <label className="text-sm font-arial text-gray-700">{label}</label>
-    <div className="flex items-center gap-1">{children}</div>
-    {hint ? <div className="col-span-2 text-xs text-gray-500">{hint}</div> : null}
+// Label left, compact input(s) right
+const InlineRow = ({ label, children }) => (
+  <div className="flex items-center gap-4 py-1.5">
+    <label className="grow text-sm font-arial text-gray-700">{label}</label>
+    <div className="shrink-0 flex items-center gap-2">{children}</div>
   </div>
 );
 
-const Input = ({ className = "", ...props }) => (
+// Base input: fixed width, readable text/caret
+const InputBase = ({ className = "", style, ...props }) => (
   <input
     {...props}
     className={
-      "w-36 rounded-xl border border-gray-300 bg-white px-3 py-2 text-right font-arial text-sm " +
-      "shadow-sm focus:outline-none focus:ring-2 focus:ring-cfa-blue/30 focus:border-cfa-blue " +
+      "shrink-0 w-32 rounded-lg border border-gray-300 bg-white px-3 py-1.5 " +
+      "text-right text-sm text-gray-900 caret-cfa-blue font-arial shadow-sm " +
+      "focus:outline-none focus:ring-2 focus:ring-cfa-blue/40 focus:border-cfa-blue " +
       className
     }
+    style={{ width: "8rem", ...style }}
   />
 );
 
- 
- 
- 
-// CFA palette
-const CFA = {
-  primary: "#4476FF",
-  dark: "#06005A",
-};
+// Handles $/% adornment without blocking caret; adds padding automatically
+function InputWithAdorn({ left, right, inputClassName = "", ...props }) {
+  const padLeft = left ? "pl-6" : "";
+  const padRight = right ? "pr-8" : ""; // reserve space so text/caret never sit under adorn
+  return (
+    <div className="relative shrink-0">
+      {left && (
+        <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-gray-500 text-sm font-arial">
+          {left}
+        </span>
+      )}
+      <InputBase {...props} className={`${padLeft} ${padRight} ${inputClassName}`} />
+      {right && (
+        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-500 text-sm font-arial">
+          {right}
+        </span>
+      )}
+    </div>
+  );
+}
 
-const fmtUSD = (x) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(x);
+// Currency ($ shown, stores raw number)
+function CurrencyField({ value, onChange }) {
+  const display = Number.isFinite(value) ? value.toFixed(2) : "";
+  return (
+    <InputWithAdorn
+      left="$"
+      type="text"
+      inputMode="decimal"
+      value={display}
+      onChange={(e) => {
+        const v = parseFloat(e.target.value);
+        onChange(Number.isFinite(v) ? v : 0);
+      }}
+      onBlur={(e) => {
+        const v = parseFloat(e.target.value);
+        e.target.value = Number.isFinite(v) ? v.toFixed(2) : "0.00";
+        onChange(Number.isFinite(v) ? v : 0);
+      }}
+      placeholder="0.00"
+    />
+  );
+}
 
-// ===== Bond Helpers =====
+// Percent (% shown, stores decimal 0–1)
+function PercentField({ value, onChange }) {
+  const display = Number.isFinite(value) ? (value * 100).toFixed(2) : "";
+  return (
+    <InputWithAdorn
+      right="%"
+      type="text"
+      inputMode="decimal"
+      value={display}
+      onChange={(e) => {
+        const v = parseFloat(e.target.value);
+        onChange(Number.isFinite(v) ? v / 100 : 0);
+      }}
+      onBlur={(e) => {
+        const v = parseFloat(e.target.value);
+        e.target.value = Number.isFinite(v) ? v.toFixed(2) : "0.00";
+        onChange(Number.isFinite(v) ? v / 100 : 0);
+      }}
+      placeholder="0.00"
+    />
+  );
+}
+
+// Integer years / frequency
+function IntField({ value, onChange }) {
+  const display = Number.isFinite(value) ? String(value) : "";
+  return (
+    <InputBase
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      value={display}
+      onChange={(e) => {
+        const v = parseInt(e.target.value, 10);
+        onChange(Number.isFinite(v) ? v : 0);
+      }}
+      onBlur={(e) => {
+        const v = parseInt(e.target.value, 10);
+        e.target.value = Number.isFinite(v) ? String(v) : "0";
+        onChange(Number.isFinite(v) ? v : 0);
+      }}
+      placeholder="0"
+    />
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                Calculations                                */
+/* -------------------------------------------------------------------------- */
+
+// Bond cash flows
 function buildBondCashFlows({ face = 100, years = 5, couponRate = 0.086, ytm = 0.065, freq = 2 }) {
   const n = years * freq;
   const c = (couponRate * face) / freq;
@@ -84,32 +169,36 @@ function buildBondCashFlows({ face = 100, years = 5, couponRate = 0.086, ytm = 0
   return { flows, price, c, r, n };
 }
 
-// ===== Mortgage Helpers =====
-function buildMortgageSchedule({ principal = 800000, rate = 0.06, years = 30 }) {
+// Mortgage schedule (rounded to cents so stacks equal total)
+function buildMortgageSchedule({ principal = 800_000, rate = 0.06, years = 30 }) {
   const m = 12;
   const n = years * m;
   const i = rate / m;
-  const pmt = (i * principal) / (1 - Math.pow(1 + i, -n));
+  const pmt = round2((i * principal) / (1 - Math.pow(1 + i, -n)));
+
   let bal = principal;
   const rows = [];
   for (let t = 1; t <= n; t++) {
-    const interest = bal * i;
-    const principalPaid = pmt - interest;
-    bal -= principalPaid;
+    let interest = round2(bal * i);
+    let principalPaid = round2(pmt - interest);
+    if (t === n) {
+      principalPaid = round2(bal);
+      interest = round2(pmt - principalPaid);
+    }
+    bal = round2(bal - principalPaid);
     rows.push({
-  month: t,
-  interest,
-  principal: principalPaid,
-  total: interest + principalPaid, // explicitly calculate
-  balance: Math.max(bal, 0),
-});
+      month: t,
+      interest,
+      principal: principalPaid,
+      total: round2(interest + principalPaid),
+      balance: Math.max(bal, 0),
+    });
   }
   return { rows, pmt };
 }
 
-// ===== Dividend Helpers =====
+// Dividend cash flows + values
 function buildDividendSeries({ D0 = 5, required = 0.1, gConst = 0.05, gShort = 0.05, gLong = 0.03, shortYears = 5, horizonYears = 10 }) {
-  const constant = Array.from({ length: horizonYears }, (_, k) => ({ year: k + 1, constDiv: D0 }));
   const constGrowth = [];
   let Dt = D0 * (1 + gConst);
   for (let t = 1; t <= horizonYears; t++) {
@@ -120,58 +209,36 @@ function buildDividendSeries({ D0 = 5, required = 0.1, gConst = 0.05, gShort = 0
   Dt = D0 * (1 + gShort);
   for (let t = 1; t <= horizonYears; t++) {
     if (t > 1) {
-      const currentG = t <= shortYears ? gShort : gLong;
-      Dt *= 1 + currentG;
+      const g = t <= shortYears ? gShort : gLong;
+      Dt *= 1 + g;
     }
     twoStage.push({ year: t, twoStage: Dt });
   }
   const data = Array.from({ length: horizonYears }, (_, idx) => ({
     year: idx + 1,
-    constDiv: constant[idx].constDiv,
+    constDiv: D0,
     constGrow: constGrowth[idx].constGrow,
     twoStage: twoStage[idx].twoStage,
   }));
+
   const priceNoGrowth = D0 / required;
   const priceGordon = gConst < required ? (D0 * (1 + gConst)) / (required - gConst) : NaN;
-  const cf1 = Array.from({ length: shortYears }, (_, k) => (D0 * Math.pow(1 + gShort, k + 1)) / Math.pow(1 + required, k + 1)).reduce((a, b) => a + b, 0);
+
+  const cf1 = Array.from({ length: shortYears }, (_, k) =>
+    (D0 * Math.pow(1 + gShort, k + 1)) / Math.pow(1 + required, k + 1)
+  ).reduce((a, b) => a + b, 0);
+
   const D_T1 = D0 * Math.pow(1 + gShort, shortYears) * (1 + gLong);
   const TV = gLong < required ? D_T1 / (required - gLong) : NaN;
   const pvTV = TV / Math.pow(1 + required, shortYears);
   const priceTwoStage = cf1 + pvTV;
+
   return { data, priceNoGrowth, priceGordon, priceTwoStage };
 }
 
-function NumberInput({ label, value, onChange, step = 0.01, min, max, suffix = "" }) {
-  return (
-    <label className="flex items-center justify-between gap-4 py-1">
-      <span className="text-sm text-gray-700 font-[Arial]">{label}</span>
-      <input
-        type="number"
-        step={step}
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-40 rounded-2xl border px-3 py-2 text-right font-[Arial] shadow-sm focus:outline-none focus:ring-2"
-      />
-      {suffix && <span className="w-10 text-right text-sm text-gray-500">{suffix}</span>}
-    </label>
-  );
-}
-
-function PercentInput(props) {
-  return (
-    <NumberInput
-      {...props}
-      step={0.01}
-      min={0}
-      max={100}
-      suffix="%"
-      onChange={(v) => props.onChange(v / 100)}
-      value={Math.round(((props.value ?? 0) * 100 + Number.EPSILON) * 100) / 100}
-    />
-  );
-}
+/* -------------------------------------------------------------------------- */
+/*                                   App                                      */
+/* -------------------------------------------------------------------------- */
 
 export default function App() {
   // Bond state
@@ -196,212 +263,160 @@ export default function App() {
   const [shortYears, setShortYears] = useState(5);
   const divs = useMemo(() => buildDividendSeries({ D0, required: req, gConst, gShort, gLong, shortYears, horizonYears: 10 }), [D0, req, gConst, gShort, gLong, shortYears]);
 
-  // Show the full schedule (all months in the selected term)
-const mortgageChart = useMemo(() => mortgage.rows, [mortgage]);
-
-// Year tick marks at 12, 24, 36, ... through the selected term
-const mortgageTicks = useMemo(() => {
-  const years = Math.ceil(mortgageChart.length / 12);
-  return Array.from({ length: years }, (_, i) => (i + 1) * 12);
-}, [mortgageChart]);
-
+  // Mortgage x-axis ticks at whole years
+  const mortgageChart = useMemo(() => mortgage.rows, [mortgage]);
+  const mortgageTicks = useMemo(() => {
+    const yrs = Math.ceil(mortgageChart.length / 12);
+    return Array.from({ length: yrs }, (_, i) => (i + 1) * 12);
+  }, [mortgageChart]);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto max-w-7xl px-6 py-6">
-          <motion.h1 initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="text-3xl font-bold tracking-tight font-[Georgia]" style={{ color: CFA.dark }}>
+      {/* Header */}
+      <header className="bg-white border-b">
+        <div className="max-w-6xl mx-auto px-6 py-6">
+          <motion.h1 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="text-3xl font-georgia" style={{ color: CFA.dark }}>
             Quantitative Methods — LOS 1: Cash Flows & PV Models
           </motion.h1>
-          <p className="text-sm text-gray-600 mt-1 font-[Arial]">Explore how input rates shape cash flows and values for bonds, mortgages, and dividend-paying equity.</p>
+          <p className="text-sm text-gray-600 font-arial mt-1">
+            Explore how input rates shape cash flows and values for bonds, mortgages, and dividend-paying equity.
+          </p>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8 space-y-10">
-        {/* Bond Module */}
-        <section className="bg-white rounded-2xl shadow p-6">
-          <h2 className="text-2xl font-semibold mb-4 font-[Georgia]" style={{ color: CFA.dark }}>1) Coupon Bond Cash Flows (Face $100)</h2>
+      {/* Content */}
+      <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
+        {/* 1) Bonds */}
+        <Card title="1) Coupon Bond Cash Flows (Face $100)">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="col-span-1">
-              <div className="rounded-2xl border p-4 bg-gray-50">
-                <h3 className="font-semibold mb-2 font-[Georgia]" style={{ color: CFA.primary }}>Inputs</h3>
-                <PercentInput label="Coupon Rate (annual)" value={couponRate} onChange={setCouponRate} />
-                <PercentInput label="Yield to Maturity (annual)" value={ytm} onChange={setYtm} />
-                <NumberInput label="Years to Maturity" value={years} min={1} max={50} step={1} onChange={setYears} />
-                <NumberInput label="Payments / Year" value={freq} min={1} max={12} step={1} onChange={setFreq} />
-                <div className="mt-4 text-sm text-gray-700 font-[Arial]">
-                  <p><strong>Price:</strong> {fmtUSD(bond.price)} (PV of coupons + redemption)</p>
-                  <p><strong>Coupon/period:</strong> {fmtUSD(bond.c)} | <strong>Yield/period:</strong> {(bond.r * 100).toFixed(3)}%</p>
+            <div>
+              <h3 className="font-georgia text-cfa-blue mb-2">Inputs</h3>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <InlineRow label="Coupon Rate (annual)"><PercentField value={couponRate} onChange={setCouponRate} /></InlineRow>
+                <InlineRow label="Yield to Maturity (annual)"><PercentField value={ytm} onChange={setYtm} /></InlineRow>
+                <InlineRow label="Years to Maturity"><IntField value={years} onChange={setYears} /></InlineRow>
+                <InlineRow label="Payments / Year"><IntField value={freq} onChange={setFreq} /></InlineRow>
+                <div className="h-px bg-gray-200 my-3" />
+                <p className="text-sm font-arial text-gray-700">
+                  <strong>Price:</strong> {fmtUSD(bond.price)} <span className="text-gray-500">(PV of coupons + redemption)</span>
+                </p>
+                <p className="text-sm font-arial text-gray-700">
+                  <strong>Coupon/period:</strong> {fmtUSD(bond.c)} ({freq}×/yr) &nbsp;|&nbsp; <strong>Yield/period:</strong> {(bond.r * 100).toFixed(3)}%
+                </p>
+              </div>
+            </div>
+
+            <div className="lg:col-span-2">
+              <div className="rounded-xl border border-gray-200 bg-white p-3">
+                <div style={{ height: 320 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={[{ period: 0, coupon: 0, other: -bond.price }, ...bond.flows]}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="period" label={{ value: "Years", position: "insideBottom", offset: -4 }} />
+                      <YAxis tickFormatter={fmtUSD} />
+                      <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} />
+                      <Legend />
+                      <Bar dataKey="coupon" name="Coupon Cash Flows" fill={CFA.primary} />
+                      <Bar dataKey="other" name="Principal/Price" fill={CFA.dark} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-600 mt-2 font-arial">Negative bar at t=0 reflects the bond price (PV). Final period shows coupon + redemption.</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* 2) Mortgage */}
+        <Card title="2) Mortgage Amortization (Level Payment)">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div>
+              <h3 className="font-georgia text-cfa-blue mb-2">Inputs</h3>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <InlineRow label="Mortgage Amount"><CurrencyField value={mortgageAmt} onChange={setMortgageAmt} /></InlineRow>
+                <InlineRow label="Annual Rate"><PercentField value={mortgageRate} onChange={setMortgageRate} /></InlineRow>
+                <InlineRow label="Term (years)"><IntField value={mortgageYears} onChange={setMortgageYears} /></InlineRow>
+                <div className="h-px bg-gray-200 my-3" />
+                <p className="text-sm font-arial text-gray-700">
+                  <strong>Level Payment:</strong> {fmtUSD(mortgage.pmt)} <span className="text-gray-500">/ month</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="lg:col-span-2">
+              <div className="rounded-xl border border-gray-200 bg-white p-3">
+                <div style={{ height: 340 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={mortgageChart}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="month"
+                        type="number"
+                        domain={[1, mortgageChart.length]}
+                        ticks={mortgageTicks}
+                        tickFormatter={(m) => (m / 12).toFixed(0)}
+                        label={{ value: "Years", position: "insideBottom", offset: -4 }}
+                      />
+                      <YAxis tickFormatter={fmtUSD} />
+                      <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} />
+                      <Legend />
+                      {/* Principal bottom, Interest top */}
+                      <Bar dataKey="principal" name="Principal Amortization" stackId="pmt" fill={CFA.dark} radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="interest"  name="Interest Cash Flows"   stackId="pmt" fill={CFA.primary} radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-600 mt-2 font-arial">X-axis spans the full mortgage term. Bars show constant payment split into principal and interest.</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* 3) Dividends */}
+        <Card title="3) Dividend Discount Models">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div>
+              <h3 className="font-georgia text-cfa-blue mb-2">Inputs</h3>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <InlineRow label="Current Dividend, D₀"><CurrencyField value={D0} onChange={setD0} /></InlineRow>
+                <InlineRow label="Required Return (r)"><PercentField value={req} onChange={setReq} /></InlineRow>
+                <InlineRow label="Constant Growth g"><PercentField value={gConst} onChange={setGConst} /></InlineRow>
+                <InlineRow label="Short-Term g₁"><PercentField value={gShort} onChange={setGShort} /></InlineRow>
+                <InlineRow label="Long-Term g₂"><PercentField value={gLong} onChange={setGLong} /></InlineRow>
+                <InlineRow label="Short-Term Years (T)"><IntField value={shortYears} onChange={setShortYears} /></InlineRow>
+
+                <div className="h-px bg-gray-200 my-3" />
+                <div className="text-sm text-gray-700 font-arial space-y-1">
+                  <p><strong>No-growth price:</strong> {fmtUSD(divs.priceNoGrowth)}</p>
+                  <p><strong>Gordon price:</strong> {isNaN(divs.priceGordon) ? <span className="text-red-600">Requires g &lt; r</span> : fmtUSD(divs.priceGordon)}</p>
+                  <p><strong>Two-stage price:</strong> {isNaN(divs.priceTwoStage) ? <span className="text-red-600">Requires g₂ &lt; r</span> : fmtUSD(divs.priceTwoStage)}</p>
                 </div>
               </div>
             </div>
 
-            {/* Chart with inline height so it renders without Tailwind */}
-            <div className="col-span-2">
-              <div style={{ height: 320 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={[{ period: 0, coupon: 0, other: -bond.price }, ...bond.flows]}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="period" label={{ value: "Years", position: "insideBottom", offset: -4 }} />
-                    <YAxis tickFormatter={fmtUSD} />
-                    <Tooltip formatter={(v) => fmtUSD(v)} />
-                    <Legend />
-                    <Bar dataKey="coupon" name="Coupon Cash Flows" fill={CFA.primary} />
-                    <Bar dataKey="other" name="Principal/Price" fill={CFA.dark} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <p className="text-xs text-gray-600 mt-2 font-[Arial]">Negative bar at t=0 reflects the bond <em>price</em> (PV). Final period shows coupon + redemption.</p>
-            </div>
-          </div>
-        </section>
-
-        {/* Mortgage Module */}
-<Card title="2) Mortgage Amortization (Level Payment)">
-  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    {/* Inputs */}
-    <div>
-      <h3 className="font-georgia text-cfa-blue mb-2">Inputs</h3>
-      <div className="rounded-xl border border-gray-200 p-4 bg-gray-50">
-        <Field label="Mortgage Amount ($)">
-          <Input
-            type="number"
-            step="1000"
-            value={mortgageAmt}
-            onChange={(e) => setMortgageAmt(+e.target.value || 0)}
-          />
-        </Field>
-        <Field label="Annual Rate">
-          <Input
-            type="number"
-            step="0.01"
-            value={(mortgageRate * 100).toFixed(2)}
-            onChange={(e) => setMortgageRate((+e.target.value || 0) / 100)}
-          />
-          <span className="text-sm text-gray-500 font-arial">%</span>
-        </Field>
-        <Field label="Term (years)">
-          <Input
-            type="number"
-            step="1"
-            value={mortgageYears}
-            onChange={(e) => setMortgageYears(+e.target.value || 0)}
-          />
-        </Field>
-
-        <div className="mt-3 h-px bg-gray-200" />
-
-        <p className="mt-3 text-sm font-arial text-gray-700">
-          <strong>Level Payment:</strong> {fmtUSD(mortgage.pmt)}{" "}
-          <span className="text-gray-500">/ month</span>
-        </p>
-      </div>
-    </div>
-
-    {/* Chart */}
-    <div className="lg:col-span-2">
-      <div className="rounded-xl border border-gray-200 bg-white p-3">
-        <div style={{ height: 340 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={mortgageChart}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="month"
-                type="number"
-                domain={[1, mortgageChart.length]}
-                ticks={mortgageTicks}
-                tickFormatter={(m) => (m / 12).toFixed(0)}
-                label={{ value: "Years", position: "insideBottom", offset: -4 }}
-              />
-              <YAxis tickFormatter={fmtUSD} />
-              <Tooltip
-                formatter={(v) => fmtUSD(v)}
-                contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }}
-              />
-              <Legend wrapperStyle={{ marginTop: 8 }} />
-              {/* Principal on bottom, Interest on top */}
-              <Bar
-                dataKey="principal"
-                name="Principal Amortization"
-                stackId="pmt"
-                fill="#06005A"
-                radius={[3, 3, 0, 0]}
-              />
-              <Bar
-                dataKey="interest"
-                name="Interest Cash Flows"
-                stackId="pmt"
-                fill="#4476FF"
-                radius={[3, 3, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <p className="text-xs text-gray-600 mt-2 font-arial">
-          X‑axis spans the full mortgage term. Stacked bars show constant
-          payment split into principal and interest.
-        </p>
-      </div>
-    </div>
-  </div>
-</Card>
-
-
-
-
-
-        {/* Dividends Module */}
-        <section className="bg-white rounded-2xl shadow p-6">
-          <h2 className="text-2xl font-semibold mb-4 font-[Georgia]" style={{ color: CFA.dark }}>3) Dividend Discount Models</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="col-span-1">
-              <div className="rounded-2xl border p-4 bg-gray-50">
-                <h3 className="font-semibold mb-2 font-[Georgia]" style={{ color: CFA.primary }}>Inputs</h3>
-                <NumberInput label="Current Dividend, D₀ ($)" value={D0} min={0} step={0.1} onChange={setD0} />
-                <PercentInput label="Required Return (r)" value={req} onChange={setReq} />
-                <PercentInput label="Constant Growth g" value={gConst} onChange={setGConst} />
-                <PercentInput label="Short‑Term g₁" value={gShort} onChange={setGShort} />
-                <PercentInput label="Long‑Term g₂" value={gLong} onChange={setGLong} />
-                <NumberInput label="Short‑Term Years (T)" value={shortYears} min={1} max={20} step={1} onChange={setShortYears} />
-                <div className="mt-4 text-sm text-gray-700 font-[Arial] space-y-1">
-                  <p><strong>No‑growth price:</strong> {fmtUSD(divs.priceNoGrowth)}</p>
-                  <p><strong>Gordon price:</strong> {isNaN(divs.priceGordon) ? "g ≥ r (undefined)" : fmtUSD(divs.priceGordon)}</p>
-                  <p><strong>Two‑stage price:</strong> {isNaN(divs.priceTwoStage) ? "g₂ ≥ r (undefined)" : fmtUSD(divs.priceTwoStage)}</p>
+            <div className="lg:col-span-2">
+              <div className="rounded-xl border border-gray-200 bg-white p-3">
+                <div style={{ height: 320 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={divs.data}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="year" label={{ value: "Years (first 10)", position: "insideBottom", offset: -4 }} />
+                      <YAxis tickFormatter={fmtUSD} />
+                      <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} />
+                      <Legend />
+                      <Bar dataKey="constDiv"  name="Constant Dividend" fill={CFA.dark} />
+                      <Bar dataKey="constGrow" name="Constant Growth"  fill={CFA.primary} />
+                      <Bar dataKey="twoStage"  name="Two-Stage Growth"  fill="#9CA3AF" />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
+                <p className="text-xs text-gray-600 mt-2 font-arial">
+                  Cash flow comparison for three dividend assumptions. Valuations at left follow standard DDM formulae.
+                </p>
               </div>
-            </div>
-
-            <div className="col-span-2">
-              <div style={{ height: 320 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={divs.data}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="year" label={{ value: "Years (first 10)", position: "insideBottom", offset: -4 }} />
-                    <YAxis tickFormatter={fmtUSD} />
-                    <Tooltip formatter={(v) => fmtUSD(v)} />
-                    <Legend />
-                    <Bar dataKey="constDiv" name="Constant Dividend" fill={CFA.dark} />
-                    <Bar dataKey="constGrow" name="Constant Growth" fill={CFA.primary} />
-                    <Bar dataKey="twoStage" name="Two‑Stage Growth" fill="#9CA3AF" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <p className="text-xs text-gray-600 mt-2 font-[Arial]">Cash flow comparison for three dividend assumptions. Valuations shown at left use standard DDM formulae.</p>
             </div>
           </div>
-        </section>
-
-        {/* Publish & Embed Hints */}
-        <section className="text-sm text-gray-600 font-[Arial]">
-          <h3 className="font-semibold font-[Georgia]" style={{ color: CFA.dark }}>Publish & Embed</h3>
-          <ol className="list-decimal pl-5 space-y-1">
-            <li>Initialize: <code>git init</code>, <code>git add .</code>, <code>git commit -m "init"</code></li>
-            <li>Connect to GitHub: <code>git remote add origin https://github.com/PaulReadCFA/cfa-quant-los1.git</code> (use your repo)</li>
-            <li>Push: <code>git branch -M main</code>, <code>git push -u origin main</code></li>
-            <li>Vercel: import the repo → Framework preset: <strong>Vite</strong> → Build: <code>npm run build</code> → Output: <code>dist</code></li>
-            <li>Canvas embed: <pre className="bg-gray-100 p-2 rounded-md overflow-x-auto">{`<iframe src="https://your-vercel-site.vercel.app" width="100%" height="720" style="border:none"></iframe>`}</pre></li>
-          </ol>
-        </section>
+        </Card>
       </main>
     </div>
   );
