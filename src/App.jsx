@@ -18,6 +18,8 @@ import {
  * 3) Dividend Discount Models (no growth, Gordon, two-stage)
  */
 
+const CHART_MARGINS = { top: 8, right: 12, left: 72, bottom: 36 };
+
 // ---- CFA palette & helpers ----
 const CFA = { primary: "#4476FF", dark: "#06005A" };
 const fmtUSD = (x) =>
@@ -273,21 +275,12 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b">
-        <div className="max-w-6xl mx-auto px-6 py-6">
-          <motion.h1 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="text-3xl font-georgia" style={{ color: CFA.dark }}>
-            Quantitative Methods — LOS 1: Cash Flows & PV Models
-          </motion.h1>
-          <p className="text-sm text-gray-600 font-arial mt-1">
-            Explore how input rates shape cash flows and values for bonds, mortgages, and dividend-paying equity.
-          </p>
-        </div>
-      </header>
+
 
       {/* Content */}
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         {/* 1) Bonds */}
-        <Card title="1) Coupon Bond Cash Flows (Face $100)">
+        <Card title="Coupon Bond Cash Flows (Face $100)">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div>
               <h3 className="font-georgia text-cfa-blue mb-2">Inputs</h3>
@@ -309,17 +302,17 @@ export default function App() {
             <div className="lg:col-span-2">
               <div className="rounded-xl border border-gray-200 bg-white p-3">
                 <div style={{ height: 320 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={[{ period: 0, coupon: 0, other: -bond.price }, ...bond.flows]}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="period" label={{ value: "Years", position: "insideBottom", offset: -4 }} />
-                      <YAxis tickFormatter={fmtUSD} />
-                      <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} />
-                      <Legend />
-                      <Bar dataKey="coupon" name="Coupon Cash Flows" fill={CFA.primary} />
-                      <Bar dataKey="other" name="Principal/Price" fill={CFA.dark} />
-                    </BarChart>
-                  </ResponsiveContainer>
+<ResponsiveContainer width="100%" height="100%">
+  <BarChart data={[{ period: 0, coupon: 0, other: -bond.price }, ...bond.flows]} margin={CHART_MARGINS}>
+    <CartesianGrid strokeDasharray="3 3" />
+    <XAxis dataKey="period" tickMargin={10} label={{ value: "Years", position: "insideBottom", offset: -20 }} />
+    <YAxis tickFormatter={fmtUSD} width={80} />
+    <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} />
+    <Legend verticalAlign="top" align="right" height={36} wrapperStyle={{ paddingBottom: 6 }} />
+    <Bar dataKey="coupon" name="Coupon Cash Flows" fill={CFA.primary} />
+    <Bar dataKey="other"  name="Principal/Price"     fill={CFA.dark} />
+  </BarChart>
+</ResponsiveContainer>
                 </div>
                 <p className="text-xs text-gray-600 mt-2 font-arial">Negative bar at t=0 reflects the bond price (PV). Final period shows coupon + redemption.</p>
               </div>
@@ -328,7 +321,7 @@ export default function App() {
         </Card>
 
         {/* 2) Mortgage */}
-        <Card title="2) Mortgage Amortization (Level Payment)">
+        <Card title="Mortgage Amortization (Level Payment)">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div>
               <h3 className="font-georgia text-cfa-blue mb-2">Inputs</h3>
@@ -346,25 +339,30 @@ export default function App() {
             <div className="lg:col-span-2">
               <div className="rounded-xl border border-gray-200 bg-white p-3">
                 <div style={{ height: 340 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={mortgageChart}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="month"
-                        type="number"
-                        domain={[1, mortgageChart.length]}
-                        ticks={mortgageTicks}
-                        tickFormatter={(m) => (m / 12).toFixed(0)}
-                        label={{ value: "Years", position: "insideBottom", offset: -4 }}
-                      />
-                      <YAxis tickFormatter={fmtUSD} />
-                      <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} />
-                      <Legend />
-                      {/* Principal bottom, Interest top */}
-                      <Bar dataKey="principal" name="Principal Amortization" stackId="pmt" fill={CFA.dark} radius={[3, 3, 0, 0]} />
-                      <Bar dataKey="interest"  name="Interest Cash Flows"   stackId="pmt" fill={CFA.primary} radius={[3, 3, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+<ResponsiveContainer width="100%" height="100%">
+  <BarChart data={mortgageChart} margin={CHART_MARGINS}>
+    <CartesianGrid strokeDasharray="3 3" />
+
+    <XAxis
+      dataKey="month"
+      type="number"
+      domain={[1, mortgageChart.length]}
+      ticks={mortgageTicks}
+      tickFormatter={(m) => (m / 12).toFixed(0)}
+      tickMargin={8}                                   // extra space under ticks
+      label={{ value: "Years", position: "insideBottom", offset: -20 }}
+    />
+
+    <YAxis tickFormatter={fmtUSD} width={80} />        // reserve label width
+
+    <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} />
+
+    <Legend verticalAlign="top" align="right" height={36} wrapperStyle={{ paddingBottom: 6 }} />
+
+    <Bar dataKey="principal" name="Principal Amortization" stackId="pmt" fill={CFA.dark}    radius={[3,3,0,0]} />
+    <Bar dataKey="interest"  name="Interest Cash Flows"   stackId="pmt" fill={CFA.primary} radius={[3,3,0,0]} />
+  </BarChart>
+</ResponsiveContainer>
                 </div>
                 <p className="text-xs text-gray-600 mt-2 font-arial">X-axis spans the full mortgage term. Bars show constant payment split into principal and interest.</p>
               </div>
@@ -373,7 +371,7 @@ export default function App() {
         </Card>
 
         {/* 3) Dividends */}
-        <Card title="3) Dividend Discount Models">
+        <Card title="Dividend Discount Models">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div>
               <h3 className="font-georgia text-cfa-blue mb-2">Inputs</h3>
@@ -397,18 +395,18 @@ export default function App() {
             <div className="lg:col-span-2">
               <div className="rounded-xl border border-gray-200 bg-white p-3">
                 <div style={{ height: 320 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={divs.data}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="year" label={{ value: "Years (first 10)", position: "insideBottom", offset: -4 }} />
-                      <YAxis tickFormatter={fmtUSD} />
-                      <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} />
-                      <Legend />
-                      <Bar dataKey="constDiv"  name="Constant Dividend" fill={CFA.dark} />
-                      <Bar dataKey="constGrow" name="Constant Growth"  fill={CFA.primary} />
-                      <Bar dataKey="twoStage"  name="Two-Stage Growth"  fill="#9CA3AF" />
-                    </BarChart>
-                  </ResponsiveContainer>
+<ResponsiveContainer width="100%" height="100%">
+  <BarChart data={divs.data} margin={CHART_MARGINS}>
+    <CartesianGrid strokeDasharray="3 3" />
+    <XAxis dataKey="year" tickMargin={8} label={{ value: "Years (first 10)", position: "insideBottom", offset: -20 }} />
+    <YAxis tickFormatter={fmtUSD} width={80} />
+    <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} />
+    <Legend verticalAlign="top" align="right" height={36} wrapperStyle={{ paddingBottom: 6 }} />
+    <Bar dataKey="constDiv"  name="Constant Dividend" fill={CFA.dark} />
+    <Bar dataKey="constGrow" name="Constant Growth"  fill={CFA.primary} />
+    <Bar dataKey="twoStage"  name="Two‑Stage Growth" fill="#9CA3AF" />
+  </BarChart>
+</ResponsiveContainer>
                 </div>
                 <p className="text-xs text-gray-600 mt-2 font-arial">
                   Cash flow comparison for three dividend assumptions. Valuations at left follow standard DDM formulae.
